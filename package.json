@@ -1,0 +1,27 @@
+{
+  "name": "gated-testnet",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/server",
+    "apps/client"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w apps/server\" \"npm run dev -w apps/client\"",
+    "dev:server": "npm run dev -w apps/server",
+    "dev:client": "npm run dev -w apps/client",
+    "smoke": "node ./scripts/smoke-client.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^13.3.0",
+    "@x402/fetch": "^2",
+    "@x402/stellar": "^2",
+    "dotenv": "^16.4.7"
+  }
+}
