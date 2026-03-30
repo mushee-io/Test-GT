@@ -10,14 +10,22 @@ dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
+
 const network = process.env.NETWORK || "stellar:testnet";
 const payTo = process.env.TESTNET_SERVER_STELLAR_ADDRESS;
-const facilitatorUrl = process.env.TESTNET_FACILITATOR_URL || "https://channels.openzeppelin.com/x402/testnet";
+const facilitatorUrl =
+  process.env.TESTNET_FACILITATOR_URL ||
+  "https://channels.openzeppelin.com/x402/testnet";
 const facilitatorApiKey = process.env.TESTNET_FACILITATOR_API_KEY || "";
-const xlmAssetContract = process.env.TESTNET_XLM_ASSET_CONTRACT_ID || "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const paymentAmountBaseUnits = process.env.PAYMENT_AMOUNT_BASE_UNITS || "10000000";
+const xlmAssetContract =
+  process.env.TESTNET_XLM_ASSET_CONTRACT_ID ||
+  "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+const paymentAmountBaseUnits =
+  process.env.PAYMENT_AMOUNT_BASE_UNITS || "10000000";
 const paymentPriceDisplay = process.env.PAYMENT_PRICE_DISPLAY || "1";
-const paywallDisabled = String(process.env.PAYWALL_DISABLED || "false") === "true";
+const paywallDisabled =
+  String(process.env.PAYWALL_DISABLED || "false") === "true";
+
 const startupErrors = [];
 
 if (!payTo) {
@@ -25,7 +33,40 @@ if (!payTo) {
 }
 
 app.disable("x-powered-by");
-app.use(cors({ origin: (process.env.CORS_ORIGINS || "http://localhost:5173").split(",") }));
+
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "PAYMENT-SIGNATURE",
+    "payment-signature",
+  ],
+  exposedHeaders: [
+    "PAYMENT-REQUIRED",
+    "PAYMENT-RESPONSE",
+    "payment-required",
+    "payment-response",
+    "x-mushee-receipt",
+  ],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "256kb" }));
 
 app.get("/", (_req, res) => {
@@ -42,8 +83,15 @@ const facilitatorClient = new HTTPFacilitatorClient({
   url: facilitatorUrl,
   createAuthHeaders: facilitatorApiKey
     ? async () => {
-        const headers = { Authorization: `Bearer ${facilitatorApiKey}` };
-        return { verify: headers, settle: headers, supported: headers };
+        const headers = {
+          Authorization: `Bearer ${facilitatorApiKey}`,
+        };
+
+        return {
+          verify: headers,
+          settle: headers,
+          supported: headers,
+        };
       }
     : undefined,
 });
@@ -66,16 +114,20 @@ if (!paywallDisabled && startupErrors.length === 0) {
       {
         "POST /api/summarize": {
           accepts,
-          description: "Summarize arbitrary text using a native XLM-gated route on Stellar testnet.",
+          description:
+            "Summarize arbitrary text using a native XLM-gated route on Stellar testnet.",
           mimeType: "application/json",
         },
       },
-      new x402ResourceServer(facilitatorClient).register(network, new ExactStellarScheme()),
-    ),
+      new x402ResourceServer(facilitatorClient).register(
+        network,
+        new ExactStellarScheme()
+      )
+    )
   );
 }
 
-app.get("/api/config", async (_req, res) => {
+app.get("/api/config", (_req, res) => {
   res.json({
     app: "Gated Testnet",
     route: "/api/summarize",
@@ -95,18 +147,28 @@ app.get("/api/config", async (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.status(startupErrors.length === 0 ? 200 : 500).json({ ok: startupErrors.length === 0, network, paywallDisabled, startupErrors });
+  res.status(startupErrors.length === 0 ? 200 : 500).json({
+    ok: startupErrors.length === 0,
+    network,
+    paywallDisabled,
+    startupErrors,
+  });
 });
 
 app.post("/api/summarize", (req, res) => {
   if (startupErrors.length > 0) {
-    return res.status(500).json({ error: "Server configuration is incomplete.", startupErrors });
+    return res.status(500).json({
+      error: "Server configuration is incomplete.",
+      startupErrors,
+    });
   }
 
   const text = String(req.body?.text || "").trim();
 
   if (!text) {
-    return res.status(400).json({ error: "Text is required." });
+    return res.status(400).json({
+      error: "Text is required.",
+    });
   }
 
   const summary = summarizeText(text);
@@ -142,8 +204,11 @@ if (process.env.VERCEL !== "1") {
     console.log(`Protected route: POST http://localhost:${port}/api/summarize`);
     console.log(`Network: ${network}`);
     console.log(`Pay to: ${payTo || "<missing>"}`);
-    console.log(`Price: ${paymentPriceDisplay} XLM (${paymentAmountBaseUnits} base units)`);
+    console.log(
+      `Price: ${paymentPriceDisplay} XLM (${paymentAmountBaseUnits} base units)`
+    );
     console.log(`Paywall disabled: ${paywallDisabled}`);
+
     if (startupErrors.length > 0) {
       console.warn(`Startup errors: ${startupErrors.join(", ")}`);
     }
@@ -154,6 +219,7 @@ export default app;
 
 function summarizeText(text) {
   const sentences = splitSentences(text).filter(Boolean);
+
   if (sentences.length === 0) {
     return text.slice(0, 220);
   }
@@ -164,6 +230,7 @@ function summarizeText(text) {
 
   const picked = [first, second, longest].filter(Boolean);
   const unique = [...new Set(picked)];
+
   return unique.join(" ").trim();
 }
 
